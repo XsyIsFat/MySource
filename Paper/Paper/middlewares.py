@@ -1,0 +1,152 @@
+# -*- coding: utf-8 -*-
+
+# Define here the models for your spider middleware
+#
+# See documentation in:
+# https://doc.scrapy.org/en/latest/topics/spider-middleware.html
+from scrapy import log
+from scrapy.http import Request
+from scrapy.item import BaseItem
+from scrapy.utils.request import request_fingerprint
+from Paper.items import MyItem
+
+from scrapy import signals
+import pymongo
+client=pymongo.MongoClient('localhost')
+paper=client['paper']
+item=paper['Item']
+class PaperSpiderMiddleware(object):
+    # Not all methods need to be defined. If a method is not defined,
+    # scrapy acts as if the spider middleware does not modify the
+    # passed objects.
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        # This method is used by Scrapy to create your spiders.
+        s = cls()
+        crawler.signals.connect(s.spider_opened, signal=signals.spider_opened)
+        return s
+
+    def process_spider_input(self, response, spider):
+        # Called for each response that goes through the spider
+        # middleware and into the spider.
+
+        # Should return None or raise an exception.
+        return None
+
+    def process_spider_output(self, response, result, spider):
+        # Called with the results returned from the Spider, after
+        # it has processed the response.
+
+        # Must return an iterable of Request, dict or Item objects.
+        for i in result:
+            yield i
+
+    def process_spider_exception(self, response, exception, spider):
+        # Called when a spider or process_spider_input() method
+        # (from other spider middleware) raises an exception.
+        pass
+             # Should return either None or an iterable of Response, dict
+        # or Item objects.
+
+
+    def process_start_requests(self, start_requests, spider):
+        pass
+        # num = item.find_one()
+        # login = 'http://login.moneyplat.com/login?service=http%3A%2F%2Fwww.moneyplat.com%2Faccount%2FtoAccount.html'
+        # cookies = self.Reader(login)
+        # headers = {
+        #     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.112 Safari/537.36',
+        #     'Cookie': cookies
+        # }
+        # url = 'http://www.moneyplat.com/bonds/bondsInvestList.html?rate=&money=&pageNo={}&pageSize=10'.format(num)
+        # yield Request(url, callback=spiders.pld.PldSpider.index_parse,headers=headers)
+
+
+    def spider_opened(self, spider):
+        spider.logger.info('Spider opened: %s' % spider.name)
+
+
+class PaperDownloaderMiddleware(object):
+    # Not all methods need to be defined. If a method is not defined,
+    # scrapy acts as if the downloader middleware does not modify the
+    # passed objects.
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        # This method is used by Scrapy to create your spiders.
+        s = cls()
+        crawler.signals.connect(s.spider_opened, signal=signals.spider_opened)
+        return s
+
+    def process_request(self, request, spider):
+        # Called for each request that goes through the downloader
+        # middleware.
+
+        # Must either:
+        # - return None: continue processing this request
+        # - or return a Response object
+        # - or return a Request object
+        # - or raise IgnoreRequest: process_exception() methods of
+        #   installed downloader middleware will be called
+        return None
+
+    def process_response(self, request, response, spider):
+        # Called with the response returned from the downloader.
+
+        # Must either;
+        # - return a Response object
+        # - return a Request object
+        # - or raise IgnoreRequest
+        return response
+
+    def process_exception(self, request, exception, spider):
+        # Called when a download handler or a process_request()
+        # (from other downloader middleware) raises an exception.
+
+        # Must either:
+        # - return None: continue processing this exception
+        # - return a Response object: stops process_exception() chain
+        # - return a Request object: stops process_exception() chain
+        pass
+
+    def spider_opened(self, spider):
+        spider.logger.info('Spider opened: %s' % spider.name)
+class IgnoreVisitedItems(object):
+  """Middleware to ignore re-visiting item pages if they
+  were already visited before.
+  The requests to be filtered by have a meta['filter_visited']
+  flag enabled and optionally define an id to use
+  for identifying them, which defaults the request fingerprint,
+  although you'd want to use the item id,
+  if you already have it beforehand to make it more robust.
+  """
+  FILTER_VISITED = 'filter_visited'
+  VISITED_ID = 'visited_id'
+  CONTEXT_KEY = 'visited_ids'
+  def process_spider_output(self, response, result, spider):
+    context = getattr(spider, 'context', {})
+    visited_ids = context.setdefault(self.CONTEXT_KEY, {})
+    ret = []
+    for x in result:
+      visited = False
+      if isinstance(x, Request):
+        if self.FILTER_VISITED in x.meta:
+          visit_id = self._visited_id(x)
+          if visit_id in visited_ids:
+            log.msg("Ignoring already visited: %s" % x.url,
+                level=log.INFO, spider=spider)
+            visited = True
+      elif isinstance(x, BaseItem):
+        visit_id = self._visited_id(response.request)
+        if visit_id:
+          visited_ids[visit_id] = True
+          x['visit_id'] = visit_id
+          x['visit_status'] = 'new'
+      if visited:
+        ret.append(MyItem(visit_id=visit_id, visit_status='old'))
+      else:
+        ret.append(x)
+    return ret
+  def _visited_id(self, request):
+    return request.meta.get(self.VISITED_ID) or request_fingerprint(request)
